@@ -1,4 +1,12 @@
-﻿using System;
+﻿//////////////////////////////////////////////////////////////////////////////////////
+//
+//  NetworkConfigurationHelper by fengyh
+//  This comment MUST be included in any copy of this code.
+//  Author: https://fengyh.cn
+//
+//////////////////////////////////////////////////////////////////////////////////////
+
+using System;
 using System.Collections.Generic;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
