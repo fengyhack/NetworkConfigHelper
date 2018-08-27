@@ -21,12 +21,16 @@ namespace Demo
             Console.Write($"Which adapter you want to config? Index(1~{i}):");
             var s = Console.ReadLine();
             int idx = int.Parse(s);
+
             if (idx >= 1 && idx <= i)
             {
                 var name = configs.ElementAt(idx - 1).Key;
                 Console.WriteLine($"You choosed: {name}");
-                Console.WriteLine("Please input the configurations as below");
 
+                NetworkConfigHelper.DisableAdapter(name);
+                Console.WriteLine("The chosen adapter is now disabled");
+
+                Console.WriteLine("Please input the configurations as below");
                 Console.Write("IP:");
                 var ip = Console.ReadLine();
                 Console.Write("Mask:");
@@ -34,9 +38,15 @@ namespace Demo
                 Console.Write("Gateway:");
                 var gateway = Console.ReadLine();
 
-                var config = new NetworkConfig() { IP = ip, Mask = mask, Gateway =  gateway };
+                NetworkConfigHelper.EnableAdapter(name);
+                Console.WriteLine("The chosen adapter is now enabled");
+                var config = new NetworkConfig() { IP = ip, Mask = mask, Gateway = gateway };
                 NetworkConfigHelper.SetAdapterConfiguration(name, config);
-                Console.WriteLine("Done");
+                Console.WriteLine();
+
+                Console.WriteLine("New configuration:");
+                var cfg = NetworkConfigHelper.GetAdapterConfiguration(name);
+                Console.WriteLine($"{cfg.AdapterName}: {cfg.IP}");
             }
             else
             {

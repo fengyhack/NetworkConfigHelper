@@ -9,14 +9,35 @@ namespace NetworkAdapter
 {
     public static class NetworkConfigHelper
     {
+        #region Private-Members
+
+        private static List<string> adapterNames = null;
+        private static Dictionary<string, NetworkConfig> networkConfigurations = null;
+
+        #endregion Private-Members
+
+        /// <summary>
+        /// 获取网卡名称列表
+        /// </summary>
+        public static List<string> GetAdapterNames()
+        {
+            SearchAllNetworkAdapters();
+            return adapterNames;
+        }
+
         /// <summary>
         /// 获取网卡信息列表（名称:网络配置）
         /// </summary>
         public static Dictionary<string, NetworkConfig> GetAdapterConfigurations()
         {
-            var nwInterfaces = NetworkInterface.GetAllNetworkInterfaces();
-            var adapterNames = GetAdapterNames(nwInterfaces);
-            return GetAdapterConfigurations(nwInterfaces, adapterNames);
+            SearchAllNetworkAdapters();
+            return networkConfigurations;
+        }
+
+        public static NetworkConfig GetAdapterConfiguration(string adapterName)
+        {
+            SearchAllNetworkAdapters();
+            return networkConfigurations[adapterName];
         }
 
         /// <summary>
@@ -48,10 +69,6 @@ namespace NetworkAdapter
 
                 if (found)
                 {
-                    //if (!(bool)mo["IPEnabled"])
-                    //{
-                    //}
-
                     if (IsValidIPAddr(config.IP) && IsValidMask(config.Mask))
                     {
                         var parameter = mo.GetMethodParameters("EnableStatic");
@@ -89,6 +106,44 @@ namespace NetworkAdapter
 
                     break;
                 }
+            }
+        }
+
+        /// <summary>
+        /// 禁用网卡
+        /// </summary>
+        /// <param name="adapterName">网卡名称</param>
+        public static bool DisableAdapter(string adapterName)
+        {
+            var mo = GetNetworkManagementObject(adapterName);
+            if (mo != null)
+            {
+                var ret = mo.InvokeMethod("Disable", null);
+                var rv = int.Parse(ret.ToString());
+                return (rv == 0);
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 启用网卡
+        /// </summary>
+        /// <param name="adapterName">网卡名称</param>
+        public static bool EnableAdapter(string adapterName)
+        {
+            var mo = GetNetworkManagementObject(adapterName);
+            if (mo != null)
+            {
+                var ret = mo.InvokeMethod("Enable", null);
+                var rv = int.Parse(ret.ToString());
+                return (rv == 0);
+            }
+            else
+            {
+                return false;
             }
         }
 
@@ -157,50 +212,51 @@ namespace NetworkAdapter
 
         #region Privates
 
-        private static List<string> GetAdapterNames(NetworkInterface[] nwInterfaces)
+        /// <summary>
+        /// 查询所有网卡信息
+        /// </summary>
+        private static void SearchAllNetworkAdapters()
         {
-            var adapterNames = new List<string>();
+            if (adapterNames == null)
+            {
+                adapterNames = new List<string>();
 
-            var adapterDescriptions = new List<string>();
-            foreach (var adapter in nwInterfaces)
-            {
-                adapterDescriptions.Add(adapter.Description);
-            }
-            var wmi = new ManagementClass("Win32_NetworkAdapterConfiguration");
-            var moc = wmi.GetInstances();
-            foreach (var m in moc)
-            {
-                var mo = m as ManagementObject;
-                foreach (var p in mo.Properties)
+                var query = "SELECT * From Win32_NetworkAdapter";
+                var searcher = new ManagementObjectSearcher(query);
+                var collection = searcher.Get();
+
+                foreach (var obj in collection)
                 {
-                    if (p.Name.Equals("Description") && p.Value != null)
+                    var mo = obj as ManagementObject;
+                    foreach (var p in mo.Properties)
                     {
-                        var desc = p.Value.ToString();
-                        if (adapterDescriptions.Contains(desc))
+                        if (p.Name.Equals("NetConnectionID") && p.Value != null)
                         {
-                            adapterNames.Add(desc);
-                            break;
+                            var name = obj["Name"].ToString();
+                            adapterNames.Add(name);
                         }
                     }
                 }
-
             }
 
-            return adapterNames;
-        }
-
-        private static Dictionary<string, NetworkConfig> GetAdapterConfigurations(NetworkInterface[] nwInterfaces, List<string> adapterNames)
-        {
-            var configurations = new Dictionary<string, NetworkConfig>();
-
-            foreach (var adapter in nwInterfaces)
+            if (networkConfigurations == null)
             {
-                if (adapterNames.Contains(adapter.Description))
+                networkConfigurations = new Dictionary<string, NetworkConfig>();
+            }
+            else
+            {
+                networkConfigurations.Clear();
+            }
+
+            var networkInterfaces = NetworkInterface.GetAllNetworkInterfaces();
+            foreach (var nwi in networkInterfaces)
+            {
+                if (adapterNames.Contains(nwi.Description))
                 {
                     var config = new NetworkConfig();
-                    config.SetAdapterName(adapter.Description);
-                    config.SetInterfaceType(adapter.NetworkInterfaceType);
-                    var ipp = adapter.GetIPProperties();
+                    config.SetAdapterName(nwi.Description);
+                    config.SetInterfaceType(nwi.NetworkInterfaceType);
+                    var ipp = nwi.GetIPProperties();
                     var ipCollection = ipp.UnicastAddresses;
                     foreach (var ipAddr in ipCollection)
                     {
@@ -215,11 +271,41 @@ namespace NetworkAdapter
                             break;
                         }
                     }
-                    configurations.Add(config.AdapterName, config);
+                    networkConfigurations.Add(nwi.Description, config);
+                }
+            }
+            
+            foreach(var name in adapterNames)
+            {
+                if(!networkConfigurations.ContainsKey(name))
+                {
+                    var config = new NetworkConfig();
+                    config.SetAdapterName(name);
+                    config.IP = "N/A";
+                    networkConfigurations.Add(name, config);
+                }
+            }
+        }
+
+        private static ManagementObject GetNetworkManagementObject(string adapterName)
+        {
+            var query = "SELECT * From Win32_NetworkAdapter";
+            var searcher = new ManagementObjectSearcher(query);
+            var collection = searcher.Get();
+
+            foreach (var obj in collection)
+            {
+                var mo = obj as ManagementObject;
+                foreach (var p in mo.Properties)
+                {
+                    if (adapterName.Equals(obj["Name"].ToString()))
+                    {
+                        return mo;
+                    }
                 }
             }
 
-            return configurations;
+            return null;
         }
 
         #endregion Privates
